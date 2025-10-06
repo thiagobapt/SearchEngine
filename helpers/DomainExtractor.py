@@ -1,3 +1,5 @@
 def ExtractDomain(url: str):
     tokens = url.split('/')
-    return "".join(tokens[0:3]).split('.')[-2]
+    simplified_url = "".join(tokens[1:3])
+    domain_and_dot = simplified_url.split('.')[-2:]
+    return ".".join(domain_and_dot)

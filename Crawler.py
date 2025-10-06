@@ -27,43 +27,37 @@ domain_cooldowns = set()
 
 req_times = []
 
-session = req.Session()
-
 MAX_CRAWLS = 200
 
-def my_failure_callback(retry_state):
-    """
-    This callback is executed when all retries are exhausted and the function
-    still fails.
-    """
+def fetch_error(retry_state):
     print(f"All retries failed after {retry_state.attempt_number} attempts.")
     print(f"Last exception: {retry_state.outcome.exception()}")
-    # You can log the error, send notifications, or perform other actions here.
     return None # Or raise a custom exception, or return a default value
 
 @retry(
     stop=stop_after_attempt(4),  # maximum number of retries
     wait=wait_exponential(multiplier=2, min=2, max=3),  # exponential backoff
-    retry_error_callback=my_failure_callback
+    retry_error_callback=fetch_error
 )
-def fetch_url(url):
-    response = session.get(url, headers=headers)
+def fetch_url(url: str, session: req.Session, id: int):
+    print(f'Id: {id} | fetching: {url}')
+    response = session.get(url, headers=headers,timeout= 1)
     return response
 
-def crawl():
+def crawl(thread_id: int, session: req.Session):
+    print(f'{thread_id} starting')
     
-    crawled = 0
-    while (
-        not high_priority_queue.empty() or not low_priority_queue.empty()
-    ) and crawled < MAX_CRAWLS:
 
+    crawled = 0
+    while crawled < MAX_CRAWLS:
         # update the priority queue
         if not high_priority_queue.empty():
             current_url = high_priority_queue.get()
         elif not low_priority_queue.empty():
             current_url = low_priority_queue.get()
         else:
-           break
+           time.sleep(1)
+           continue
 
         with visited_lock:
             if current_url in visited_urls:
@@ -74,10 +68,10 @@ def crawl():
             visited_urls.add(current_url)
 
         sleep_time = 0.05
-
+        print('domain: ', ExtractDomain(current_url))
         if(ExtractDomain(current_url) in domain_cooldowns): time.sleep(sleep_time)
 
-        response = fetch_url(current_url)
+        response = fetch_url(current_url, session, thread_id)
 
         if(response == None or response.status_code != 200): continue
 
@@ -98,55 +92,57 @@ def crawl():
                         domain_cooldowns.add(domain)
                         high_priority_queue.put(new_url)
                     else: low_priority_queue.put(new_url)
+    
+    print(f'{thread_id} closing')
 
 
-num_workers = 5
+num_workers = 50
 threads = []
 
-def tracker():
-    while True:
-        clear_screen()
-        print(f"Visited: {len(visited_urls)} || In queue: {high_priority_queue.qsize() + low_priority_queue.qsize()}")
-        time.sleep(0.5)
-
 # start worker threads
-for _ in range(num_workers):
-    thread = threading.Thread(target=crawl, daemon=True)
+for i in range(num_workers):
+    session = req.Session()
+    thread = threading.Thread(target=crawl, daemon=True, args=[i, session])
     threads.append(thread)
     thread.start()
 
-thread = threading.Thread(target=tracker, daemon=True)
-thread.start()
-
-# wait for all threads to finish
-for thread in threads:
-    thread.join()
-
 import csv
 
-# ...
+def save():
+    # ...
 
-# save data to CSV
-csv_filename = "visited.csv"
-with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
-    writer = csv.DictWriter(file, fieldnames=["Url"])
-    writer.writeheader()
-    for url in visited_urls:
-        writer.writerow({"Url": url})
+    # save data to CSV
+    csv_filename = "visited.csv"
+    with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=["Url"])
+        writer.writeheader()
+        for url in visited_urls:
+            writer.writerow({"Url": url})
 
-# save data to CSV
-csv_filename = "queue.csv"
-with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
-    writer = csv.DictWriter(file, fieldnames=["Url"])
-    writer.writeheader()
-    while (
-        not high_priority_queue.empty() or not low_priority_queue.empty()
-    ):  
-        # update the priority queue
-        if not high_priority_queue.empty():
-            current_url = high_priority_queue.get()
-        elif not low_priority_queue.empty():
-            current_url = low_priority_queue.get()
-        else:
-           break
-        writer.writerow({"Url": current_url})
+    # save data to CSV
+    csv_filename = "queue.csv"
+    with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=["Url"])
+        writer.writeheader()
+        while (
+            not high_priority_queue.empty() or not low_priority_queue.empty()
+        ):  
+            # update the priority queue
+            if not high_priority_queue.empty():
+                current_url = high_priority_queue.get()
+            elif not low_priority_queue.empty():
+                current_url = low_priority_queue.get()
+            else:
+                break
+            writer.writerow({"Url": current_url})
+
+import atexit
+
+def exit_handler():
+    print('Exiting...')
+    save()
+
+atexit.register(exit_handler)
+
+while True:
+    time.sleep(1)
