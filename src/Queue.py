@@ -9,7 +9,7 @@ from src.helpers.DomainExtractor import ExtractDomain
 class QueueManager:
 
     def __init__(self):
-        target_url = "https://en.wikipedia.org"
+        target_url = "https://en.wikipedia.com"
 
         # instantiate the queues
         self.__high_priority_queue = Queue()
@@ -29,16 +29,15 @@ class QueueManager:
     def getUrl(self) -> str | None:
         # update the priority queue
         if not self.__high_priority_queue.empty():
-            current_url = self.__high_priority_queue.get()
+            current_url = self.__high_priority_queue.get_nowait()
         elif not self.__low_priority_queue.empty():
-            current_url = self.__low_priority_queue.get()
+            current_url = self.__low_priority_queue.get_nowait()
         else:
            return
 
-        with self.__visited_lock:
-            if current_url in self.__visited_urls:
-                return
-            self.__visited_urls.add(current_url)
+        if current_url in self.__visited_urls:
+            return
+        self.__visited_urls.add(current_url)
 
         return current_url
     
@@ -58,14 +57,14 @@ class QueueManager:
 
             ulrs.append(new_url)
 
-        with self.__visited_lock:
-            for new_url in ulrs:
-                if(not new_url in self.__visited_urls): 
-                    domain = ExtractDomain(new_url)
-                    if(not domain in self.__domain_cooldowns): 
-                        self.__domain_cooldowns.add(domain)
-                        self.__high_priority_queue.put(new_url)
-                    else: self.__low_priority_queue.put(new_url)
+        
+        for new_url in ulrs:
+            if(not new_url in self.__visited_urls): 
+                domain = ExtractDomain(new_url)
+                if(not domain in self.__domain_cooldowns): 
+                    self.__domain_cooldowns.add(domain)
+                    self.__high_priority_queue.put(new_url)
+                else: self.__low_priority_queue.put(new_url)
 
     def save(self):
         # ...

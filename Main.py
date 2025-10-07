@@ -1,12 +1,14 @@
+import asyncio
 import atexit
-import time
 
+from src.AsyncWorkers import AsyncWorkerManager
 from src.Workers import WorkerManager
 
-workers = WorkerManager(min_workers=10, max_workers=20, desired_crawls_per_sec=15)
+# workers = WorkerManager(min_workers=10, max_workers=20, desired_crawls_per_sec=15)
+workers = AsyncWorkerManager()
 
-def main():
-    workers.start()
+async def main():
+    await workers.start()
 
 
 def save(workers: WorkerManager):
@@ -16,4 +18,4 @@ def save(workers: WorkerManager):
 atexit.register(save, workers)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
