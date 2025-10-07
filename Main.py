@@ -1,17 +1,15 @@
 import asyncio
 import atexit
 
-from src.AsyncWorkers import AsyncWorkerManager
-from src.Workers import WorkerManager
+from src.Workers import Workers
 
-# workers = WorkerManager(min_workers=10, max_workers=20, desired_crawls_per_sec=15)
-workers = AsyncWorkerManager()
+workers = Workers()
 
 async def main():
     await workers.start()
 
 
-def save(workers: WorkerManager):
+def save(workers: Workers):
     print("saving")
     workers.exit_handler()
 

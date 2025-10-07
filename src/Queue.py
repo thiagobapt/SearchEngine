@@ -1,15 +1,13 @@
 from queue import Queue
-import threading
 import csv
-from bs4 import ResultSet, Tag
 
-from src.helpers.DomainExtractor import ExtractDomain
+from src.helpers.DomainExtractor import CleanUrl, ExtractDomain
 
 
 class QueueManager:
 
     def __init__(self):
-        target_url = "https://en.wikipedia.com"
+        target_url = "https://github.com"
 
         # instantiate the queues
         self.__high_priority_queue = Queue()
@@ -20,7 +18,6 @@ class QueueManager:
         self.__low_priority_queue.put(target_url)
 
         self.__visited_urls = set()
-        self.__visited_lock = threading.Lock()
 
         # Domains we have visited before and must apply a cooldown
         self.__domain_cooldowns = set()
@@ -47,18 +44,9 @@ class QueueManager:
     def getQueueSize(self):
         return self.__high_priority_queue.qsize() + self.__low_priority_queue.qsize()
     
-    def queue(self, links: ResultSet[Tag]):
-        ulrs: list[str] = []
-
-        for link_element in links:
-            new_url = link_element["href"]
-
-            if(not new_url.startswith('http')): continue
-
-            ulrs.append(new_url)
-
-        
-        for new_url in ulrs:
+    def queue(self, urls: list[str]):
+        for new_url in urls:
+            new_url = CleanUrl(new_url)
             if(not new_url in self.__visited_urls): 
                 domain = ExtractDomain(new_url)
                 if(not domain in self.__domain_cooldowns): 
