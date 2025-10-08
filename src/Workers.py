@@ -1,4 +1,6 @@
 import csv
+
+from pymongo import MongoClient
 from src.Crawler import Crawler
 from src.Queue import QueueManager
 from src.Indexer import Indexer
@@ -6,10 +8,10 @@ from src.Indexer import Indexer
 class Workers:
     def __init__(self):
         self.__manager = QueueManager()
-        self.__indexer = Indexer()
+        self.__indexer = Indexer(MongoClient("mongodb://localhost:27017/"))
 
     async def start(self):
-        crawler = Crawler(self.__indexer, 10)
+        crawler = Crawler(self.__indexer, 100)
         await crawler.crawl(self.__manager)
 
     def save_index(self):
