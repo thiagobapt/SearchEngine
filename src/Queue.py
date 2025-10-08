@@ -1,6 +1,6 @@
 from queue import Queue
 import csv
-
+import random
 from src.helpers.DomainExtractor import CleanUrl, ExtractDomain
 
 
@@ -25,7 +25,7 @@ class QueueManager:
 
     def getUrl(self) -> str | None:
         # update the priority queue
-        if not self.__high_priority_queue.empty():
+        if not self.__high_priority_queue.empty() and random.randint(0,100) < 80:
             current_url = self.__high_priority_queue.get_nowait()
         elif not self.__low_priority_queue.empty():
             current_url = self.__low_priority_queue.get_nowait()

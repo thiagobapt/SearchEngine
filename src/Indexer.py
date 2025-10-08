@@ -1,26 +1,44 @@
+from collections import defaultdict
+import string
 from nltk import pos_tag
-import nltk
 from nltk.tokenize import word_tokenize
-from nltk.corpus import wordnet as wn
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
 class Indexer: 
     
     lemmatizer = WordNetLemmatizer()
-    stop_words = set(stopwords.words('english'))
+    stop_words = set(stopwords.words())
+    index: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     def __init__(self):
         pass
 
-    async def index_html(self, url: str, text: str):
-        
-        tokens = word_tokenize(text.lower())
-        tagged = pos_tag(tokens)
+    def __clean_and_tokenize(self, text: str):
+        text = " ".join(text.split())
 
-        filtered_tokens = [word for word in tagged if word not in self.stop_words]
+        text = text.translate(str.maketrans('', '', string.punctuation + '’'))
+
+        tokens = word_tokenize(text)
+
+        filtered_tokens = [word for word in tokens if word not in self.stop_words]
+
+        filtered_tokens = [word for word in filtered_tokens if not len(word) > 30]
+
+        tagged = pos_tag(filtered_tokens)
 
         lemmatized_words = [self.lemmatizer.lemmatize(
-            word, pos='v' if tag.startswith('V') else 'n') for word, tag in filtered_tokens]
+            word, pos='v' if tag.startswith('V') else 'n') for word, tag in tagged]
         
-        print(lemmatized_words)
+        return lemmatized_words
+
+    def index_html(self, url: str, text: str):
+        tokens = self.__clean_and_tokenize(text)
+        
+        for token in tokens:
+            self.index[token][url] += 1
+        
+
+    def get_index(self):
+        return self.index
+

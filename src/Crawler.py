@@ -8,12 +8,14 @@ from src.Indexer import Indexer
 from src.Queue import QueueManager
 from src.helpers.ClearCmd import clear_screen
 from src.helpers.DomainExtractor import FindRobotsTxt
+from src.Indexer import Indexer
 
 class Crawler:
     user_agent = 'NoAICrawler'
     headers = {'User-Agent': user_agent}
 
-    def __init__(self, max_concurrent=8):
+    def __init__(self, indexer: Indexer, max_concurrent=8):
+        self.indexer = indexer
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.request_times = deque(maxlen=100)
@@ -111,13 +113,21 @@ class Crawler:
 
         links = tree.xpath('//a/@href')
 
-        all_text = tree.text_content()
+        elements = tree.xpath('//p | //h1 | //h2 | //h3 | //h4 | //h5 | //h6 | //a')
+
+        all_text = ''
+
+        for element in  elements:
+            all_text = all_text + element.text_content()
         
         hrefs = []
         for link in links:
             if str(link).startswith('http'):
                 hrefs.append(link)
-        
-        await Indexer().index_html(url=url, text=all_text)
+
+        try:
+            self.indexer.index_html(url=url, text=all_text)
+        except Exception as e:
+            print(e)
 
         manager.queue(hrefs)
