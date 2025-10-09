@@ -21,12 +21,15 @@ class Crawler:
         self.request_times = deque(maxlen=100)
         self.total_requests = 0
 
-    async def fetch_url(self, session: aiohttp.ClientSession, url: str) -> str | None:
+    async def fetch_url(self, session: aiohttp.ClientSession, url: str, queue: QueueManager) -> str | None:
         try:
             robots_url = FindRobotsTxt(url)
+
+            
+
             async with session.get(robots_url, timeout=aiohttp.ClientTimeout(total=5), headers=self.headers) as robots_response:
                 rp = Protego.parse(await robots_response.text())
-
+                
                 delay = rp.crawl_delay(self.user_agent)
 
                 if(delay): 
@@ -69,7 +72,7 @@ class Crawler:
             while True:
                 urls_batch = []
                 for _ in range(self.max_concurrent):
-                    url = manager.getUrl()
+                    url = manager.getHighPriorityUrl()
                     if url:
                         urls_batch.append(url)
                     elif not url:
@@ -100,7 +103,7 @@ class Crawler:
     async def process_url(self, session: aiohttp.ClientSession, url: str, manager: QueueManager):
         start_time = time.perf_counter()
     
-        response = await self.fetch_url(session, url)
+        response = await self.fetch_url(session, url, manager)
         
         request_time_ms = (time.perf_counter() - start_time)
         self.request_times.append(request_time_ms)

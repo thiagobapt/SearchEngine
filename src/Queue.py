@@ -1,8 +1,8 @@
-from queue import Queue
+from collections import deque
 import csv
-import random
+import threading
 from src.helpers.DomainExtractor import CleanUrl, ExtractDomain
-
+from protego import Protego
 
 class QueueManager:
 
@@ -10,50 +10,50 @@ class QueueManager:
         target_url = "https://github.com"
 
         # instantiate the queues
-        self.__high_priority_queue = Queue()
-        self.__low_priority_queue = Queue()
+        self.__high_priority_queue = deque()
+        self.__low_priority_queue = deque()
 
         # create priority queues
-        self.__high_priority_queue.put(target_url)
-        self.__low_priority_queue.put(target_url)
+        self.__high_priority_queue.append(target_url)
+        self.__low_priority_queue.append(target_url)
 
-        self.__visited_urls = set()
+        self.__seen_urls = set()
 
         # Domains we have visited before and must apply a cooldown
-        self.__domain_cooldowns = set()
+        self.__visited_domains = set()
 
+        self.__robots_lock = threading.Lock()
+        self.__robots_txt = dict[str, str]
 
-    def getUrl(self) -> str | None:
-        # update the priority queue
-        if not self.__high_priority_queue.empty() and random.randint(0,100) < 80:
-            current_url = self.__high_priority_queue.get_nowait()
-        elif not self.__low_priority_queue.empty():
-            current_url = self.__low_priority_queue.get_nowait()
-        else:
-           return
-
-        if current_url in self.__visited_urls:
-            return
-        self.__visited_urls.add(current_url)
-
-        return current_url
+    def getHighPriorityUrl(self) -> str | None:
+        return self.__high_priority_queue.pop()
+    
+    def getLowPriorityUrl(self) -> str | None:
+        return self.__low_priority_queue.pop()
     
     def inCooldown(self, current_url: str) -> bool:
-        return ExtractDomain(current_url) in self.__domain_cooldowns
+        return ExtractDomain(current_url) in self.__visited_domains
     
-    def getQueueSize(self):
-        return self.__high_priority_queue.qsize() + self.__low_priority_queue.qsize()
+    def checkRobots(self, url: str):
+        text = self.__robots_txt.get(url)
+        if(not text): return
+        rp = Protego.parse(text)
+        return rp
+    
+    def saveRobotsTxt(self, url: str, text: str):
+        with self.__robots_lock:
+            self.__robots_txt[url] = text
     
     def queue(self, urls: list[str]):
         for new_url in urls:
             new_url = CleanUrl(new_url)
-            if(not new_url in self.__visited_urls): 
+            if(not new_url in self.__seen_urls):
                 domain = ExtractDomain(new_url)
-                if(not domain in self.__domain_cooldowns): 
-                    self.__domain_cooldowns.add(domain)
-                    self.__high_priority_queue.put(new_url)
-                else: self.__low_priority_queue.put(new_url)
-
+                if(not domain in self.__visited_domains): 
+                    self.__visited_domains.add(domain)
+                    self.__high_priority_queue.append(new_url)
+                else: self.__low_priority_queue.append(new_url)
+    
     def save(self):
         # ...
 

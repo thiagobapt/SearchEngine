@@ -26,5 +26,5 @@ class Workers:
 
     def exit_handler(self):
         print('Exiting...')
-        self.__manager.save()
-        self.save_index()
+        #self.__manager.save() # no longer needed
+        # self.save_index() # no longer needed
