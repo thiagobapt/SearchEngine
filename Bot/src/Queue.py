@@ -1,13 +1,14 @@
 from collections import deque
 import csv
 import threading
-from src.helpers.DomainExtractor import CleanUrl, ExtractDomain
+import time
+from src.helpers.DomainExtractor import CleanUrl, extract_domain
 from protego import Protego
 
 class QueueManager:
 
     def __init__(self):
-        target_url = "https://github.com"
+        target_url = "https://wikipedia.org"
 
         # instantiate the queues
         self.__high_priority_queue = deque()
@@ -17,38 +18,68 @@ class QueueManager:
         self.__high_priority_queue.append(target_url)
         self.__low_priority_queue.append(target_url)
 
+        # Keep track of all seens urls to avoid duplicates
+        self.__seen_lock = threading.Lock()
         self.__seen_urls = set()
 
-        # Domains we have visited before and must apply a cooldown
+        # Keep track of all visited domains to determine high and low priority urls
+        self.__visited_lock = threading.Lock()
         self.__visited_domains = set()
 
         self.__robots_lock = threading.Lock()
-        self.__robots_txt = dict[str, str]
+        self.__robots_txt = dict[str, str]()
+        
+        self.__cooldowns_lock = threading.Lock()
+        self.__cooldowns = dict[str, float]()
 
-    def getHighPriorityUrl(self) -> str | None:
-        return self.__high_priority_queue.pop()
+    def get_high_priority_url(self) -> str | None:
+        try:
+            return self.__high_priority_queue.pop()
+        except IndexError:
+            return None
     
-    def getLowPriorityUrl(self) -> str | None:
-        return self.__low_priority_queue.pop()
+    def get_low_priority_url(self) -> str | None:
+        try:
+            return self.__low_priority_queue.pop()
+        except IndexError:
+            return None
     
-    def inCooldown(self, current_url: str) -> bool:
-        return ExtractDomain(current_url) in self.__visited_domains
+    def get_next_cooldown(self, domain: str, cooldown_time: float = 0) -> float:
+
+        if(not cooldown_time): cooldown_time = 0
+
+        with self.__cooldowns_lock:
+            next_cooldown = self.__cooldowns.get(domain)
+            if(not next_cooldown): next_cooldown = time.time()
+
+            self.__cooldowns[domain] = next_cooldown + cooldown_time
+            return next_cooldown - time.time() if next_cooldown > time.time() else 0.0
     
-    def checkRobots(self, url: str):
-        text = self.__robots_txt.get(url)
-        if(not text): return
+    def check_robots(self, domain: str) -> bool:
+        text = self.__robots_txt.get(domain)
+        if(not text): return False
+        return True
+
+    def get_robots(self, domain: str):
+        text = self.__robots_txt.get(domain)
+        if(not text): text = ''
         rp = Protego.parse(text)
         return rp
     
-    def saveRobotsTxt(self, url: str, text: str):
+    def save_robots_txt(self, domain: str, text: str):
         with self.__robots_lock:
-            self.__robots_txt[url] = text
+            self.__robots_txt[domain] = text
     
     def queue(self, urls: list[str]):
         for new_url in urls:
             new_url = CleanUrl(new_url)
-            if(not new_url in self.__seen_urls):
-                domain = ExtractDomain(new_url)
+
+            with self.__seen_lock:
+                if(new_url in self.__seen_urls): continue
+                self.__seen_urls.add(new_url)
+            
+            domain = extract_domain(new_url)
+            with self.__visited_lock:
                 if(not domain in self.__visited_domains): 
                     self.__visited_domains.add(domain)
                     self.__high_priority_queue.append(new_url)

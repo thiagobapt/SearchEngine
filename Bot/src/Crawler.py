@@ -1,47 +1,50 @@
 import asyncio
 from collections import deque
 import aiohttp
-import time
 from lxml import html
-from protego import Protego
 from src.Indexer import Indexer
 from src.Queue import QueueManager
 from src.helpers.ClearCmd import clear_screen
-from src.helpers.DomainExtractor import FindRobotsTxt
+from src.helpers.DomainExtractor import extract_domain, find_robots_txt
 from src.Indexer import Indexer
+import threading
 
 class Crawler:
-    user_agent = 'NoAICrawler'
-    headers = {'User-Agent': user_agent}
+    user_agent = '*'
+    headers = {'User-Agent': 'NoAICrawler'}
 
-    def __init__(self, indexer: Indexer, max_concurrent=8):
+    def __init__(self, indexer: Indexer, high_priority: bool, max_concurrent=8):
         self.indexer = indexer
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
-        self.request_times = deque(maxlen=100)
         self.total_requests = 0
+        self.high_priority = high_priority
 
     async def fetch_url(self, session: aiohttp.ClientSession, url: str, queue: QueueManager) -> str | None:
         try:
-            robots_url = FindRobotsTxt(url)
+            robots_url = find_robots_txt(url)
+            domain = extract_domain(url)
 
-            
+            if(queue.check_robots(domain)):
+                async with session.get(robots_url, timeout=aiohttp.ClientTimeout(total=5), headers=self.headers) as robots_response:
+                    queue.save_robots_txt(domain, await robots_response.text())
 
-            async with session.get(robots_url, timeout=aiohttp.ClientTimeout(total=5), headers=self.headers) as robots_response:
-                rp = Protego.parse(await robots_response.text())
-                
-                delay = rp.crawl_delay(self.user_agent)
+            rp = queue.get_robots(domain)
 
-                if(delay): 
-                    await asyncio.sleep(delay)
+            if(rp.crawl_delay(self.user_agent)): print(f"delay for {url}: {rp.crawl_delay(self.user_agent)}")
 
+            cooldown = queue.get_next_cooldown(domain, rp.crawl_delay(self.user_agent))
             if(rp.can_fetch(url, self.user_agent)):
+                if(cooldown > 0): 
+                    print(f"Sleeping for: {cooldown} seconds")
+                    await asyncio.sleep(cooldown)
                 try:
                     async with session.get(url, timeout=aiohttp.ClientTimeout(total=5), headers=self.headers) as response:
                         if response.status == 200:
+                            print(f"{threading.current_thread().name} Crawled: {url}")
                             return await response.text()
                         return None
-                except asyncio.TimeoutError:
+                except asyncio.TimeoutError as e:
                     return None
                 except Exception as e:
                     return None
@@ -62,9 +65,6 @@ class Crawler:
             enable_cleanup_closed=True,
             force_close=False
         )
-        last_total_requests = 0
-        last_stats_time = time.time()
-        stats_interval = 10.0
         
         timeout = aiohttp.ClientTimeout(total=2, connect=1)
 
@@ -72,7 +72,7 @@ class Crawler:
             while True:
                 urls_batch = []
                 for _ in range(self.max_concurrent):
-                    url = manager.getHighPriorityUrl()
+                    url = manager.get_high_priority_url() if self.high_priority else manager.get_low_priority_url()
                     if url:
                         urls_batch.append(url)
                     elif not url:
@@ -84,30 +84,17 @@ class Crawler:
                 
                 tasks = [self.process_url(session, url, manager) for url in urls_batch]
                 await asyncio.gather(*tasks, return_exceptions=True)
-                
-                current_time = time.time()
-                if current_time - last_stats_time > stats_interval:
-                    self.show_stats(last_total_requests, stats_interval)
-                    last_total_requests = self.total_requests
-                    last_stats_time = current_time
         pass
 
-    def show_stats(self, last_total_requests, stats_interval):
-        if self.request_times:
-            avg_req_time = sum(self.request_times) / len(self.request_times)
-            clear_screen()
-            crawls_per_second = round((self.total_requests - last_total_requests) / stats_interval, 2)
-            print(f"Avg request time: {round(avg_req_time, 2)}s | Crawls per second: {crawls_per_second}")
-            print(f"Crawled: {self.total_requests} websites!")
+    def index(self, url: str, all_text: str):
+        try:
+            self.indexer.index_html(url=url, text=all_text)
+        except Exception as e:
+            print(e)
 
     async def process_url(self, session: aiohttp.ClientSession, url: str, manager: QueueManager):
-        start_time = time.perf_counter()
     
         response = await self.fetch_url(session, url, manager)
-        
-        request_time_ms = (time.perf_counter() - start_time)
-        self.request_times.append(request_time_ms)
-        self.total_requests += 1
 
         if response is None: 
             return
@@ -128,9 +115,6 @@ class Crawler:
             if str(link).startswith('http'):
                 hrefs.append(link)
 
-        try:
-            self.indexer.index_html(url=url, text=all_text)
-        except Exception as e:
-            print(e)
+        asyncio.gather(asyncio.to_thread(self.index, url, all_text))
 
         manager.queue(hrefs)
