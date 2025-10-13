@@ -13,8 +13,7 @@ class Crawler:
     user_agent = '*'
     headers = {'User-Agent': 'NoAICrawler'}
 
-    def __init__(self, indexer: Indexer, high_priority: bool, max_concurrent=8):
-        self.indexer = indexer
+    def __init__(self, high_priority: bool, max_concurrent=8):
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.total_requests = 0
@@ -36,12 +35,12 @@ class Crawler:
             cooldown = queue.get_next_cooldown(domain, rp.crawl_delay(self.user_agent))
             if(rp.can_fetch(url, self.user_agent)):
                 if(cooldown > 0): 
-                    print(f"Sleeping for: {cooldown} seconds")
+                    # print(f"Sleeping for: {cooldown} seconds")
                     await asyncio.sleep(cooldown)
                 try:
                     async with session.get(url, timeout=aiohttp.ClientTimeout(total=5), headers=self.headers) as response:
                         if response.status == 200:
-                            print(f"{threading.current_thread().name} Crawled: {url}")
+                            # print(f"{threading.current_thread().name} Crawled: {url}")
                             return await response.text()
                         return None
                 except asyncio.TimeoutError as e:
@@ -86,9 +85,9 @@ class Crawler:
                 await asyncio.gather(*tasks, return_exceptions=True)
         pass
 
-    def index(self, url: str, all_text: str):
+    def index(self, url: str, all_text: str, title: str, description: str, outgoing_links: list[str]):
         try:
-            self.indexer.index_html(url=url, text=all_text)
+            self.indexer.index_html(url=url, text=all_text, title=title, description=description, outgoing_links=outgoing_links)
         except Exception as e:
             print(e)
 
@@ -105,16 +104,33 @@ class Crawler:
 
         elements = tree.xpath('//p | //h1 | //h2 | //h3 | //h4 | //h5 | //h6 | //a')
 
+        title = tree.xpath("//title/text()")[0]
+
+        description = ''
+        description_element = tree.xpath("//meta[@name='description']")
+
+        if description_element:
+            description = description_element[0].get('content')
+
         all_text = ''
 
         for element in  elements:
             all_text = all_text + element.text_content()
         
         hrefs = []
+        outgoing_links: list[str] = []
+        outgoing_domains: list[str] = []
+
         for link in links:
             if str(link).startswith('http'):
+                link_domain = extract_domain(link)
+
+                if(not link_domain in outgoing_domains):
+                    outgoing_domains.append(link_domain)
+                    if(not link_domain == extract_domain(url)): outgoing_links.append(link)
+
                 hrefs.append(link)
 
-        asyncio.gather(asyncio.to_thread(self.index, url, all_text))
+        manager.queue_index(url=url, title=title, description=description, outgoing=outgoing_links, text=all_text)
 
         manager.queue(hrefs)

@@ -2,7 +2,8 @@ import asyncio
 import csv
 import threading
 import time
-from pymongo import MongoClient
+from pymongo import AsyncMongoClient, MongoClient
+import pymongo
 from src.Crawler import Crawler
 from src.Queue import QueueManager
 from src.Indexer import Indexer
@@ -10,23 +11,39 @@ from src.Indexer import Indexer
 class Workers:
     def __init__(self):
         self.__manager = QueueManager()
-        self.__indexer = Indexer(MongoClient("mongodb://localhost:27017/"))
+        self.__mongo_client = MongoClient("mongodb://localhost:27017/")
 
-    def new_worker(self, high_priority: bool):
-        crawler = Crawler(self.__indexer, high_priority=high_priority, max_concurrent=30)
+    def new_crawler(self, high_priority: bool):
+        crawler = Crawler(high_priority=high_priority, max_concurrent=30)
 
         asyncio.run(crawler.crawl(self.__manager))
+    
+    def new_indexer(self):
+        indexer = Indexer(db= AsyncMongoClient("mongodb://localhost:27017/"), max_concurrent = 10)
+        asyncio.run(indexer.index(self.__manager))
 
-    def start(self, max_workers: int):
+    def start(self, max_crawlers: int, max_indexers: int):
+        # initialize database
+        db = self.__mongo_client['searchengine']
+        
+        db['indexes'].create_index([("word", pymongo.TEXT), ("url", pymongo.TEXT)])
+        db['outgoing_links'].create_index([("url", pymongo.TEXT)])
+        db['pages'].create_index([("url", pymongo.TEXT)])
+
         # Minimum of 2 workers is needed, one for high priority and one for low
-        if(max_workers < 2): max_workers = 2
+        if(max_crawlers < 2): max_crawlers = 2
 
         # Start threads for each link
         threads: list[threading.Thread] = []
 
-        for i in range(max_workers):
+        for i in range(max_crawlers):
             # Using `args` to pass positional arguments and `kwargs` for keyword arguments
-            t = threading.Thread(target=self.new_worker, args=[i + 1 < (max_workers * 0.7)], daemon=True)
+            t = threading.Thread(target=self.new_crawler, args=[i + 1 < (max_crawlers * 0.7)], daemon=True)
+            threads.append(t)
+
+        for i in range(max_indexers):
+            # Using `args` to pass positional arguments and `kwargs` for keyword arguments
+            t = threading.Thread(target=self.new_indexer, daemon=True)
             threads.append(t)
         
         # Start each thread

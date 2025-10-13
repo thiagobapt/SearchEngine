@@ -16,7 +16,7 @@ print("Done!")
 
 def main():
     print("Starting...")
-    workers.start(max_workers=100)
+    workers.start(max_crawlers=1, max_indexers=10)
 
 def save(workers: Workers):
     print("saving")

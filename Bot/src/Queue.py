@@ -13,6 +13,7 @@ class QueueManager:
         # instantiate the queues
         self.__high_priority_queue = deque()
         self.__low_priority_queue = deque()
+        self.__indexing_queue = deque()
 
         # create priority queues
         self.__high_priority_queue.append(target_url)
@@ -43,10 +44,16 @@ class QueueManager:
             return self.__low_priority_queue.pop()
         except IndexError:
             return None
+        
+    def get_next_to_index(self) -> dict[str, list[str]] | None:
+        try:
+            return self.__indexing_queue.pop()
+        except IndexError:
+            return None
     
     def get_next_cooldown(self, domain: str, cooldown_time: float = 0) -> float:
 
-        if(not cooldown_time): cooldown_time = 0
+        if(not cooldown_time): cooldown_time = 1.0
 
         with self.__cooldowns_lock:
             next_cooldown = self.__cooldowns.get(domain)
@@ -84,6 +91,15 @@ class QueueManager:
                     self.__visited_domains.add(domain)
                     self.__high_priority_queue.append(new_url)
                 else: self.__low_priority_queue.append(new_url)
+
+    def queue_index(self, url: str, title: str, description: str, outgoing: list[str], text: str):
+        self.__indexing_queue.append({
+            "url": [url],
+            "title": [title],
+            "description": [description],
+            "outgoing": outgoing,
+            "text": [text]
+        })
     
     def save(self):
         # ...
