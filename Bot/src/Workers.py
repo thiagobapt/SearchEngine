@@ -14,21 +14,21 @@ class Workers:
         self.__mongo_client = MongoClient("mongodb://localhost:27017/")
 
     def new_crawler(self, high_priority: bool):
-        crawler = Crawler(high_priority=high_priority, max_concurrent=30)
+        crawler = Crawler(high_priority=high_priority, max_concurrent=100)
 
         asyncio.run(crawler.crawl(self.__manager))
     
     def new_indexer(self):
-        indexer = Indexer(db= AsyncMongoClient("mongodb://localhost:27017/"), max_concurrent = 10)
+        indexer = Indexer(db= AsyncMongoClient("mongodb://localhost:27017/"), max_concurrent = 1000)
         asyncio.run(indexer.index(self.__manager))
 
     def start(self, max_crawlers: int, max_indexers: int):
         # initialize database
         db = self.__mongo_client['searchengine']
         
-        db['indexes'].create_index([("word", pymongo.TEXT), ("url", pymongo.TEXT)])
-        db['outgoing_links'].create_index([("url", pymongo.TEXT)])
-        db['pages'].create_index([("url", pymongo.TEXT)])
+        # db['indexes'].create_index([("word", pymongo.TEXT), ("url", pymongo.TEXT)])
+        # db['outgoing_links'].create_index([("url", pymongo.TEXT)])
+        # db['pages'].create_index([("url", pymongo.TEXT)])
 
         # Minimum of 2 workers is needed, one for high priority and one for low
         if(max_crawlers < 2): max_crawlers = 2

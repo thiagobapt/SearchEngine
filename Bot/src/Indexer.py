@@ -7,7 +7,7 @@ from nltk import pos_tag
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from pymongo import AsyncMongoClient, UpdateOne
+from pymongo import AsyncMongoClient, InsertOne
 from collections import Counter
 
 from src.Queue import QueueManager
@@ -97,14 +97,13 @@ class Indexer:
         
         for word, count in token_count.items():
             operations.append(
-                UpdateOne(
+                InsertOne(
                     {"word": word, "url": url},
                     {
                         # 3. Use $setOnInsert for static fields during an upsert
                         "$setOnInsert": {"word": word, "url": url},
                         "$inc": {"count": count}
                     },
-                    upsert=True
                 )
             )
 
