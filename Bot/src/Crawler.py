@@ -1,13 +1,8 @@
 import asyncio
-from collections import deque
 import aiohttp
 from lxml import html
-from src.Indexer import Indexer
 from src.Queue import QueueManager
-from src.helpers.ClearCmd import clear_screen
 from src.helpers.DomainExtractor import extract_domain, find_robots_txt
-from src.Indexer import Indexer
-import threading
 
 class Crawler:
     user_agent = '*'
@@ -27,9 +22,9 @@ class Crawler:
             if(queue.check_robots(domain)):
                 async with session.get(robots_url, timeout=aiohttp.ClientTimeout(total=5), headers=self.headers) as robots_response:
                     queue.save_robots_txt(domain, await robots_response.text())
-
+            
             rp = queue.get_robots(domain)
-
+            
             if(rp.crawl_delay(self.user_agent)): print(f"delay for {url}: {rp.crawl_delay(self.user_agent)}")
 
             cooldown = queue.get_next_cooldown(domain, rp.crawl_delay(self.user_agent))
@@ -49,6 +44,7 @@ class Crawler:
                     return None
                 
         except Exception as e:
+            print(e)
             return None
 
     async def crawl(self, manager: QueueManager):
@@ -70,12 +66,8 @@ class Crawler:
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             while True:
                 urls_batch = []
-                for _ in range(self.max_concurrent):
-                    url = manager.get_high_priority_url() if self.high_priority else manager.get_low_priority_url()
-                    if url:
-                        urls_batch.append(url)
-                    elif not url:
-                        break
+                if self.high_priority: urls_batch = manager.get_high_priority_url(self.max_concurrent)
+                else: urls_batch = manager.get_low_priority_url(self.max_concurrent)
                 
                 if not urls_batch:
                     await asyncio.sleep(0.001)

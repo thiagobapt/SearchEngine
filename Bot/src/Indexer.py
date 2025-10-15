@@ -27,11 +27,7 @@ class Indexer:
 
     async def index(self, manager: QueueManager):
         while True:
-            indexing_batch: list[dict[str, list[str]]] = []
-            for _ in range(self.max_concurrent):
-                to_index = manager.get_next_to_index()
-                if to_index:
-                    indexing_batch.append(to_index)
+            indexing_batch: list[dict[str, list[str]]] = manager.get_next_to_index(self.max_concurrent)
             
             if not indexing_batch:
                 await asyncio.sleep(1)
