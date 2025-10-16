@@ -26,7 +26,8 @@ class Indexer:
         pass
 
     async def index(self, manager: QueueManager):
-        while True:
+        while not manager.interrupted:
+            if(manager.interrupted): break
             indexing_batch: list[dict[str, list[str]]] = manager.get_next_to_index(self.max_concurrent)
             
             if not indexing_batch:
@@ -42,6 +43,8 @@ class Indexer:
                 await asyncio.gather(*tasks, return_exceptions=False)
             except Exception as e:
                 print(f"{threading.current_thread().name} error: {e}")
+        
+        print(f"{threading.current_thread().name} interrupted...")
         
 
     def __clean_and_tokenize(self, text: str):
@@ -72,9 +75,9 @@ class Indexer:
         start_mongo = time.perf_counter()
 
         await self.pages.update_one(
-                {"url": url, "title": title, "description": description, "rank": 1},
+                {"url": url, "title": title, "description": description, "rank": 0},
                 {
-                    "$set": {"url": url, "title": title, "description": description, "rank": 1},
+                    "$set": {"url": url, "title": title, "description": description, "rank": 0},
                 },
                 upsert=True
             )
@@ -96,7 +99,6 @@ class Indexer:
                 InsertOne(
                     {"word": word, "url": url},
                     {
-                        # 3. Use $setOnInsert for static fields during an upsert
                         "$setOnInsert": {"word": word, "url": url},
                         "$inc": {"count": count}
                     },

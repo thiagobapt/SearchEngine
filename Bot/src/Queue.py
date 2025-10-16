@@ -14,8 +14,8 @@ class QueueManager:
         self.r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
         # create priority queues
-        # self.r.lpush('high_priority_queue', target_url)
-        # self.r.lpush('low_priority_queue', target_url)
+        self.r.lpush('high_priority_queue', target_url)
+        self.r.lpush('low_priority_queue', target_url)
 
         # Keep track of all seens urls to avoid duplicates
         self.__seen_lock = threading.Lock()
@@ -24,6 +24,8 @@ class QueueManager:
         self.__visited_lock = threading.Lock()
         
         self.__cooldowns_lock = threading.Lock()
+
+        self.interrupted = False
 
     def get_high_priority_url(self, count: int = 1) -> str | list[str] | None:
         try:
@@ -58,11 +60,11 @@ class QueueManager:
     
     def get_next_cooldown(self, domain: str, cooldown_time: float = 0) -> float:
 
-        if(not cooldown_time): cooldown_time = 1.0
+        if(not cooldown_time): cooldown_time = 2.0
 
         with self.__cooldowns_lock:
             next_cooldown = self.r.get(f"domain:{domain}")
-            if(not next_cooldown): next_cooldown = time.time()
+            if(not next_cooldown or float(next_cooldown) < time.time()): next_cooldown = time.time()
             else: next_cooldown = float(next_cooldown)
 
             self.r.set(f"domain:{domain}", json.dumps(next_cooldown + cooldown_time))

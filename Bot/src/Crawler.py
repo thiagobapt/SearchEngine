@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import aiohttp
 from lxml import html
 from src.Queue import QueueManager
@@ -28,7 +29,8 @@ class Crawler:
             if(rp.crawl_delay(self.user_agent)): print(f"delay for {url}: {rp.crawl_delay(self.user_agent)}")
 
             cooldown = queue.get_next_cooldown(domain, rp.crawl_delay(self.user_agent))
-            if(rp.can_fetch(url, self.user_agent)):
+            # if(rp.can_fetch(url, self.user_agent)):
+            if(True):
                 if(cooldown > 0): 
                     # print(f"Sleeping for: {cooldown} seconds")
                     await asyncio.sleep(cooldown)
@@ -64,7 +66,8 @@ class Crawler:
         timeout = aiohttp.ClientTimeout(total=2, connect=1)
 
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            while True:
+            while not manager.interrupted:
+                if(manager.interrupted): break
                 urls_batch = []
                 if self.high_priority: urls_batch = manager.get_high_priority_url(self.max_concurrent)
                 else: urls_batch = manager.get_low_priority_url(self.max_concurrent)
@@ -75,7 +78,10 @@ class Crawler:
                 
                 tasks = [self.process_url(session, url, manager) for url in urls_batch]
                 await asyncio.gather(*tasks, return_exceptions=True)
+            
+            print(f"{threading.current_thread().name} interrupted...")
         pass
+        
 
     def index(self, url: str, all_text: str, title: str, description: str, outgoing_links: list[str]):
         try:

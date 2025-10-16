@@ -54,15 +54,16 @@ class FormInputState(rx.State):
         lemmatized_words = [lemmatizer.lemmatize(
             word, pos='v' if tag.startswith('V') else 'n') for word, tag in tagged]
 
+        num_target_words = len(lemmatized_words)
 
         pipeline = [
-            # Filter to include documents with at least one target word
+            # Stage 1: Filter to include documents with at least one target word (initial filter)
             {
                 "$match": {
                     "word": { "$in": lemmatized_words }
                 }
             },
-            # Group by URL, calculate match count and total word count
+            # Stage 2: Group by URL, collect unique matched words, and sum the total word count
             {
                 "$group": {
                     "_id": "$url",
@@ -70,7 +71,7 @@ class FormInputState(rx.State):
                     "total_word_count": { "$sum": "$count" }
                 }
             },
-            # Calculate Match Count
+            # Stage 3: Calculate Match Count and prepare fields for next stage
             {
                 "$project": {
                     "url": "$_id",
@@ -78,41 +79,45 @@ class FormInputState(rx.State):
                     "total_word_count": 1
                 }
             },
-            # Join with the 'pages'
+            # 🌟 Stage 4: Filter to KEEP ONLY URLs that match ALL words
+            {
+                "$match": {
+                    "match_count": num_target_words
+                }
+            },
+            # Stage 5: Join with the 'pages' collection
             {
                 "$lookup": {
                     "from": "pages",
-                    "localField": "url",          # Field from the input documents (from the current pipeline)
-                    "foreignField": "url",        # Field from the documents of the "from" collection (pages)
-                    "as": "page_details"          # The name of the new array field to add to the output documents
+                    "localField": "url",
+                    "foreignField": "url",
+                    "as": "page_details"
                 }
             },
-            # Deconstruct the 'page_details' array
-            # Since 'url' is unique in the 'pages' collection, this array will usually have 0 or 1 element.
-            # This turns the array into an object for easier access.
+            # 🌟 Stage 6: Deconstruct the 'page_details' array.
+            # By omitting "preserveNullAndEmptyArrays", we automatically discard URLs that did not match a page entry (and thus have no 'rank').
             {
-                "$unwind": {
-                    "path": "$page_details",
-                    "preserveNullAndEmptyArrays": True # Important: Keep results even if no match is found in 'pages'
-                }
+                "$unwind": "$page_details"
             },
-            # Sort the results
-            # Primary: By 'match_count' (descending). Secondary: By 'total_word_count' (descending).
+            # 🌟 Stage 7: Sort the results
+            # Primary sort: By 'rank' (ascending: 1, lower rank is better)
+            # Secondary sort: By 'total_word_count' (descending: -1, higher count is better)
             {
                 "$sort": {
-                    "match_count": -1,
+                    "page_details.rank": -1,
                     "total_word_count": -1
                 }
             },
-            #  Clean up the output to include the page details
+            # Stage 8: Clean up the output to include the rank and page details
             {
                 "$project": {
                     "_id": 0,
                     "url": 1,
                     "match_count": 1,
                     "total_word_count": 1,
-                    "title": "$page_details.title",           # Extract title from the joined document
-                    "description": "$page_details.description" # Extract description from the joined document
+                    "title": "$page_details.title",
+                    "description": "$page_details.description",
+                    "rank": "$page_details.rank" # Include the rank in the final output
                 }
             }
         ]

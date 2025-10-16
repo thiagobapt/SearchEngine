@@ -20,34 +20,35 @@ class Workers:
         indexer = Indexer(db= AsyncMongoClient("mongodb://localhost:27017/"), max_concurrent = max_concurrent)
         asyncio.run(indexer.index(self.__manager))
 
-    def start(self, max_crawlers: int, max_indexers: int, max_concurrent_crawler: int, max_concurrent_indexer: int):
-        
-        # db['indexes'].create_index([("word", pymongo.TEXT), ("url", pymongo.TEXT)])
-        # db['outgoing_links'].create_index([("url", pymongo.TEXT)])
-        # db['pages'].create_index([("url", pymongo.TEXT)])
+    def start(self, low_priority_crawlers: int, high_priority_crawlers: int, max_indexers: int, max_concurrent_crawler: int, max_concurrent_indexer: int):
 
-        # Minimum of 2 workers is needed, one for high priority and one for low
-        if(max_crawlers < 2): max_crawlers = 2
+        try:
+            # Start threads for each link
+            threads: list[threading.Thread] = []
 
-        # Start threads for each link
-        threads: list[threading.Thread] = []
+            for i in range(low_priority_crawlers):
+                # Using `args` to pass positional arguments and `kwargs` for keyword arguments
+                t = threading.Thread(target=self.new_crawler, args=[False, max_concurrent_crawler], daemon=False)
+                threads.append(t)
+            
+            for i in range(high_priority_crawlers):
+                # Using `args` to pass positional arguments and `kwargs` for keyword arguments
+                t = threading.Thread(target=self.new_crawler, args=[True, max_concurrent_crawler], daemon=False)
+                threads.append(t)
 
-        for i in range(max_crawlers):
-            # Using `args` to pass positional arguments and `kwargs` for keyword arguments
-            t = threading.Thread(target=self.new_crawler, args=[i + 1 < (max_crawlers * 0.51), max_concurrent_crawler], daemon=True)
-            threads.append(t)
+            for i in range(max_indexers):
+                # Using `args` to pass positional arguments and `kwargs` for keyword arguments
+                t = threading.Thread(target=self.new_indexer, args=[max_concurrent_indexer], daemon=False)
+                threads.append(t)
+            
+            # Start each thread
+            for t in threads:
+                t.start()
 
-        for i in range(max_indexers):
-            # Using `args` to pass positional arguments and `kwargs` for keyword arguments
-            t = threading.Thread(target=self.new_indexer, args=[max_concurrent_indexer], daemon=True)
-            threads.append(t)
-        
-        # Start each thread
-        for t in threads:
-            t.start()
-
-        while True:
-            time.sleep(1)
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.__manager.interrupted = True
 
     # def save_index(self):
     #     # save data to CSV
