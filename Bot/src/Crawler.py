@@ -29,8 +29,7 @@ class Crawler:
             if(rp.crawl_delay(self.user_agent)): print(f"delay for {url}: {rp.crawl_delay(self.user_agent)}")
 
             cooldown = queue.get_next_cooldown(domain, rp.crawl_delay(self.user_agent))
-            # if(rp.can_fetch(url, self.user_agent)):
-            if(True):
+            if(rp.can_fetch(url, self.user_agent)):
                 if(cooldown > 0): 
                     # print(f"Sleeping for: {cooldown} seconds")
                     await asyncio.sleep(cooldown)
