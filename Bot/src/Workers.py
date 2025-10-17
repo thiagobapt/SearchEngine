@@ -49,18 +49,3 @@ class Workers:
                 time.sleep(1)
         except KeyboardInterrupt:
             self.__manager.interrupted = True
-
-    # def save_index(self):
-    #     # save data to CSV
-    #     csv_filename = "index.csv"
-    #     with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
-    #         writer = csv.DictWriter(file, fieldnames=["term", "urls"])
-    #         writer.writeheader()
-    #         index = self.__indexer.get_index()
-    #         for term in index.items():
-    #             writer.writerow({"term": term[0], "urls": term[1]})
-
-    def exit_handler(self):
-        print('Exiting...')
-        #self.__manager.save() # no longer needed
-        # self.save_index() # no longer needed

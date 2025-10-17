@@ -32,15 +32,9 @@ def main():
             continue
         elif selection == '4': return print('Exiting...')
         else: 
-            print('Please enter either 1 or 2')
+            print('Please enter 1, 2, 3 or 4')
             time.sleep(1)
             continue
-
-# def save(workers: Workers):
-#     print("saving")
-#     workers.exit_handler()
-
-# atexit.register(save, workers)
 
 if __name__ == "__main__":
     main()

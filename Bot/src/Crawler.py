@@ -11,8 +11,6 @@ class Crawler:
 
     def __init__(self, high_priority: bool, max_concurrent=8):
         self.max_concurrent = max_concurrent
-        self.semaphore = asyncio.Semaphore(max_concurrent)
-        self.total_requests = 0
         self.high_priority = high_priority
 
     async def fetch_url(self, session: aiohttp.ClientSession, url: str, queue: QueueManager) -> str | None:

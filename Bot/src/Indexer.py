@@ -1,5 +1,4 @@
 import asyncio
-from collections import defaultdict
 import string
 import threading
 import time
