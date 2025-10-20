@@ -1,0 +1,8 @@
+reflex
+aiohttp
+lxml
+nltk
+sentence-transformers
+networkx
+protego
+redis
